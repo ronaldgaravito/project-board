@@ -17,10 +17,14 @@ export default {
         },
       },
       boxShadow: {
-        card: '0 1px 3px 0 rgba(0,0,0,0.12), 0 1px 2px 0 rgba(0,0,0,0.08)',
-        'card-hover': '0 4px 12px 0 rgba(0,0,0,0.16)',
-        'card-drag': '0 12px 30px 0 rgba(0,0,0,0.22)',
+        card: '0 4px 6px -1px rgba(0, 0, 0, 0.1), 0 2px 4px -1px rgba(0, 0, 0, 0.06)',
+        'card-hover': '0 10px 15px -3px rgba(0, 0, 0, 0.1), 0 4px 6px -2px rgba(0, 0, 0, 0.05)',
+        'glass': '0 8px 32px 0 rgba(31, 38, 135, 0.37)',
       },
+      transitionProperty: {
+        'height': 'height',
+        'spacing': 'margin, padding',
+      }
     },
   },
   plugins: [],
