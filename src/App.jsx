@@ -1,12 +1,21 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { DragDropContext, Droppable, Draggable } from '@hello-pangea/dnd';
-import { MoreHorizontal, Plus, Trash2 } from 'lucide-react';
+import { MoreHorizontal, Plus, Trash2, Calendar, Filter, Palette, CheckCircle2, Clock, AlertTriangle } from 'lucide-react';
+
+const themes = {
+  indigo: 'linear-gradient(135deg, #667eea 0%, #764ba2 100%)',
+  sunset: 'linear-gradient(135deg, #f6d365 0%, #fda085 100%)',
+  ocean: 'linear-gradient(135deg, #13547a 0%, #80d0c7 100%)',
+  emerald: 'linear-gradient(135deg, #11998e 0%, #38ef7d 100%)',
+  midnight: 'linear-gradient(135deg, #232526 0%, #414345 100%)',
+  rose: 'linear-gradient(135deg, #f093fb 0%, #f5576c 100%)',
+};
 
 const initialData = {
   tasks: {
-    'task-1': { id: 'task-1', content: 'Design UI for Trello clone', priority: 'high' },
-    'task-2': { id: 'task-2', content: 'Implement drag and drop', priority: 'medium' },
-    'task-3': { id: 'task-3', content: 'Add task functionality', priority: 'low' },
+    'task-1': { id: 'task-1', content: 'Design UI for Trello clone', priority: 'high', dueDate: new Date().toISOString().split('T')[0] },
+    'task-2': { id: 'task-2', content: 'Implement drag and drop', priority: 'medium', dueDate: '' },
+    'task-3': { id: 'task-3', content: 'Add task functionality', priority: 'low', dueDate: '' },
   },
   columns: {
     'column-1': {
@@ -29,17 +38,35 @@ const initialData = {
 };
 
 function App() {
-  const [data, setData] = useState(initialData);
+  const [data, setData] = useState(() => {
+    const savedData = localStorage.getItem('kanban-data');
+    return savedData ? JSON.parse(savedData) : initialData;
+  });
+  const [theme, setTheme] = useState(() => {
+    const savedTheme = localStorage.getItem('kanban-theme');
+    return savedTheme || 'indigo';
+  });
+  const [filterType, setFilterType] = useState('all');
   const [editingColumn, setEditingColumn] = useState(null);
   const [newTaskContent, setNewTaskContent] = useState('');
+  const [newTaskDate, setNewTaskDate] = useState('');
   
   const [searchTerm, setSearchTerm] = useState('');
   const [editingTaskId, setEditingTaskId] = useState(null);
   const [editingTaskContent, setEditingTaskContent] = useState('');
+  const [editingTaskDate, setEditingTaskDate] = useState('');
   const [editingColTitleId, setEditingColTitleId] = useState(null);
   const [editingColTitle, setEditingColTitle] = useState('');
   const [isAddingColumn, setIsAddingColumn] = useState(false);
   const [newColTitle, setNewColTitle] = useState('');
+
+  useEffect(() => {
+    localStorage.setItem('kanban-data', JSON.stringify(data));
+  }, [data]);
+
+  useEffect(() => {
+    localStorage.setItem('kanban-theme', theme);
+  }, [theme]);
 
   const onDragEnd = (result) => {
     const { destination, source, draggableId } = result;
@@ -107,10 +134,12 @@ function App() {
   const handleAddTask = (columnId) => {
     if (!newTaskContent.trim()) return;
 
-    const newTaskId = `task-${Object.keys(data.tasks).length + 1}`;
+    const newTaskId = `task-${Date.now()}`;
     const newTask = {
       id: newTaskId,
       content: newTaskContent,
+      priority: 'low',
+      dueDate: newTaskDate,
     };
 
     const column = data.columns[columnId];
@@ -133,6 +162,7 @@ function App() {
 
     setData(newState);
     setNewTaskContent('');
+    setNewTaskDate('');
     setEditingColumn(null);
   };
 
@@ -158,7 +188,7 @@ function App() {
     setData(newState);
   };
 
-  const handleUpdateTask = (taskId, newContent) => {
+  const handleUpdateTask = (taskId, newContent, newDate) => {
     if (!newContent.trim()) return;
     const newState = {
       ...data,
@@ -167,11 +197,13 @@ function App() {
         [taskId]: {
           ...data.tasks[taskId],
           content: newContent,
+          dueDate: newDate !== undefined ? newDate : data.tasks[taskId].dueDate,
         },
       },
     };
     setData(newState);
     setEditingTaskId(null);
+    setEditingTaskDate('');
   };
 
   const togglePriority = (taskId) => {
@@ -248,7 +280,10 @@ function App() {
   };
 
   return (
-    <div className="min-h-screen p-8 font-sans text-white">
+    <div 
+      className="min-h-screen p-8 font-sans text-white transition-all duration-700 ease-in-out"
+      style={{ background: themes[theme] || themes.indigo, backgroundAttachment: 'fixed' }}
+    >
       <header className="mx-auto mb-10 flex max-w-7xl items-center justify-between">
         <div className="flex items-center space-x-3">
           <div className="flex h-10 w-10 items-center justify-center rounded-lg bg-white/20 backdrop-blur-md">
@@ -272,13 +307,45 @@ function App() {
         </div>
 
         <div className="flex items-center space-x-3">
-          <button className="rounded-lg bg-white/10 px-4 py-2 text-sm font-medium transition-all hover:bg-white/20 active:scale-95">
-            Workspaces
-          </button>
-          <button className="rounded-lg bg-white/10 px-4 py-2 text-sm font-medium transition-all hover:bg-white/20 active:scale-95">
-            Starred
-          </button>
-          <div className="h-8 w-8 rounded-full bg-gradient-to-tr from-pink-400 to-yellow-300 ring-2 ring-white/20"></div>
+          <div className="flex items-center bg-white/10 rounded-xl p-1 border border-white/20">
+            {Object.keys(themes).map((t) => (
+              <button
+                key={t}
+                onClick={() => setTheme(t)}
+                className={`w-6 h-6 rounded-lg transition-all ${theme === t ? 'ring-2 ring-white scale-110 z-10' : 'opacity-60 hover:opacity-100 hover:scale-105'}`}
+                style={{ background: themes[t] }}
+                title={t.charAt(0).toUpperCase() + t.slice(1)}
+              />
+            ))}
+          </div>
+
+          <div className="h-8 w-[1px] bg-white/20 mx-2"></div>
+
+          <div className="flex items-center bg-white/10 rounded-xl p-1 border border-white/20">
+            <button 
+              onClick={() => setFilterType('all')}
+              className={`p-2 rounded-lg transition-all ${filterType === 'all' ? 'bg-white/20 text-white' : 'text-white/60 hover:text-white'}`}
+              title="All Tasks"
+            >
+              <Filter size={18} />
+            </button>
+            <button 
+              onClick={() => setFilterType('high')}
+              className={`p-2 rounded-lg transition-all ${filterType === 'high' ? 'bg-red-500/40 text-white' : 'text-white/60 hover:text-white'}`}
+              title="High Priority"
+            >
+              <AlertTriangle size={18} />
+            </button>
+            <button 
+              onClick={() => setFilterType('overdue')}
+              className={`p-2 rounded-lg transition-all ${filterType === 'overdue' ? 'bg-orange-500/40 text-white' : 'text-white/60 hover:text-white'}`}
+              title="Overdue"
+            >
+              <Clock size={18} />
+            </button>
+          </div>
+          
+          <div className="h-8 w-8 rounded-full bg-gradient-to-tr from-pink-400 to-yellow-300 ring-2 ring-white/20 ml-4"></div>
         </div>
       </header>
 
@@ -288,7 +355,17 @@ function App() {
             const column = data.columns[columnId];
             const tasks = column.taskIds
               .map((taskId) => data.tasks[taskId])
-              .filter(task => task.content.toLowerCase().includes(searchTerm.toLowerCase()));
+              .filter(task => {
+                const matchesSearch = task.content.toLowerCase().includes(searchTerm.toLowerCase());
+                if (!matchesSearch) return false;
+                
+                if (filterType === 'high') return task.priority === 'high';
+                if (filterType === 'overdue') {
+                  if (!task.dueDate) return false;
+                  return new Date(task.dueDate) < new Date(new Date().setHours(0,0,0,0));
+                }
+                return true;
+              });
 
             return (
               <div
@@ -353,19 +430,28 @@ function App() {
                             >
                               <div className="flex items-start justify-between">
                                   {editingTaskId === task.id ? (
-                                    <textarea
-                                      autoFocus
-                                      className="text-sm font-medium leading-relaxed text-slate-700 w-full bg-slate-50 rounded p-1 focus:outline-none"
-                                      value={editingTaskContent}
-                                      onChange={(e) => setEditingTaskContent(e.target.value)}
-                                      onBlur={() => handleUpdateTask(task.id, editingTaskContent)}
-                                      onKeyDown={(e) => e.key === 'Enter' && !e.shiftKey && handleUpdateTask(task.id, editingTaskContent)}
-                                    />
+                                    <div className="w-full space-y-2">
+                                      <textarea
+                                        autoFocus
+                                        className="text-sm font-medium leading-relaxed text-slate-700 w-full bg-slate-50 rounded p-1 focus:outline-none"
+                                        value={editingTaskContent}
+                                        onChange={(e) => setEditingTaskContent(e.target.value)}
+                                        onKeyDown={(e) => e.key === 'Enter' && !e.shiftKey && handleUpdateTask(task.id, editingTaskContent, editingTaskDate)}
+                                      />
+                                      <input 
+                                        type="date"
+                                        className="text-xs text-slate-500 bg-slate-50 rounded px-2 py-1 focus:outline-none w-full border border-slate-200"
+                                        value={editingTaskDate}
+                                        onChange={(e) => setEditingTaskDate(e.target.value)}
+                                        onBlur={() => handleUpdateTask(task.id, editingTaskContent, editingTaskDate)}
+                                      />
+                                    </div>
                                   ) : (
                                     <p 
                                       onClick={() => {
                                         setEditingTaskId(task.id);
                                         setEditingTaskContent(task.content);
+                                        setEditingTaskDate(task.dueDate || '');
                                       }}
                                       className="text-sm font-medium leading-relaxed text-slate-700 cursor-pointer flex-grow"
                                     >
@@ -391,6 +477,16 @@ function App() {
                                 >
                                   {(task.priority || 'low')} Priority
                                 </button>
+                                {task.dueDate && (
+                                  <div className={`flex items-center space-x-1 text-[10px] font-bold px-2 py-0.5 rounded ${
+                                    new Date(task.dueDate) < new Date(new Date().setHours(0,0,0,0)) 
+                                    ? 'bg-red-100 text-red-600' 
+                                    : 'bg-slate-100 text-slate-500'
+                                  }`}>
+                                    <Clock size={10} />
+                                    <span>{new Date(task.dueDate).toLocaleDateString(undefined, { month: 'short', day: 'numeric' })}</span>
+                                  </div>
+                                )}
                               </div>
                             </div>
                           )}
@@ -418,6 +514,17 @@ function App() {
                           }
                         }}
                       />
+                      <div className="mt-2 flex items-center space-x-2">
+                        <label className="flex items-center space-x-1 text-[10px] font-bold text-slate-400 cursor-pointer hover:text-indigo-500">
+                          <Calendar size={14} />
+                          <input 
+                            type="date"
+                            className="bg-transparent focus:outline-none"
+                            value={newTaskDate}
+                            onChange={(e) => setNewTaskDate(e.target.value)}
+                          />
+                        </label>
+                      </div>
                       <div className="mt-2 flex items-center space-x-2">
                         <button
                           onClick={() => handleAddTask(column.id)}
