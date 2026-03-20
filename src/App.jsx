@@ -1,6 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { DragDropContext, Droppable, Draggable } from '@hello-pangea/dnd';
-import { MoreHorizontal, Plus, Trash2, Calendar, Filter, Palette, CheckCircle2, Clock, AlertTriangle } from 'lucide-react';
+import { MoreHorizontal, Plus, Trash2, Calendar, Filter, Palette, CheckCircle2, Clock, AlertTriangle, Tag, CheckSquare, Square, X, Pencil, Check, ArrowRight, ArrowLeft, ArrowDown, ArrowUp, GripVertical, ListTodo, CircleDot, Circle } from 'lucide-react';
 
 const themes = {
   indigo: 'linear-gradient(135deg, #667eea 0%, #764ba2 100%)',
@@ -11,11 +11,44 @@ const themes = {
   rose: 'linear-gradient(135deg, #f093fb 0%, #f5576c 100%)',
 };
 
+const tagColors = {
+  bug: 'bg-rose-500/20 text-rose-600 border-rose-200',
+  feature: 'bg-sky-500/20 text-sky-600 border-sky-200',
+  design: 'bg-fuchsia-500/20 text-fuchsia-600 border-fuchsia-200',
+  research: 'bg-amber-500/20 text-amber-600 border-amber-200',
+  refactor: 'bg-emerald-500/20 text-emerald-600 border-emerald-200',
+  urgent: 'bg-orange-500/20 text-orange-600 border-orange-200',
+};
+
 const initialData = {
   tasks: {
-    'task-1': { id: 'task-1', content: 'Design UI for Trello clone', priority: 'high', dueDate: new Date().toISOString().split('T')[0] },
-    'task-2': { id: 'task-2', content: 'Implement drag and drop', priority: 'medium', dueDate: '' },
-    'task-3': { id: 'task-3', content: 'Add task functionality', priority: 'low', dueDate: '' },
+    'task-1': { 
+      id: 'task-1', 
+      content: 'Design UI for Trello clone', 
+      priority: 'high', 
+      dueDate: new Date().toISOString().split('T')[0],
+      tags: ['design', 'feature'],
+      subtasks: [
+        { id: 'sub-1', content: 'Create color palette', completed: true },
+        { id: 'sub-2', content: 'Design task cards', completed: false }
+      ]
+    },
+    'task-2': { 
+      id: 'task-2', 
+      content: 'Implement drag and drop', 
+      priority: 'medium', 
+      dueDate: '',
+      tags: ['feature'],
+      subtasks: []
+    },
+    'task-3': { 
+      id: 'task-3', 
+      content: 'Add task functionality', 
+      priority: 'low', 
+      dueDate: '',
+      tags: ['research'],
+      subtasks: []
+    },
   },
   columns: {
     'column-1': {
@@ -59,6 +92,8 @@ function App() {
   const [editingColTitle, setEditingColTitle] = useState('');
   const [isAddingColumn, setIsAddingColumn] = useState(false);
   const [newColTitle, setNewColTitle] = useState('');
+  const [newSubtaskContent, setNewSubtaskContent] = useState('');
+  const [isAddingTag, setIsAddingTag] = useState(null); // taskId
 
   useEffect(() => {
     localStorage.setItem('kanban-data', JSON.stringify(data));
@@ -140,6 +175,8 @@ function App() {
       content: newTaskContent,
       priority: 'low',
       dueDate: newTaskDate,
+      tags: [],
+      subtasks: [],
     };
 
     const column = data.columns[columnId];
@@ -222,6 +259,68 @@ function App() {
       },
     };
     setData(newState);
+  };
+
+  const handleAddSubtask = (taskId) => {
+    if (!newSubtaskContent.trim()) return;
+    const newSubId = `sub-${Date.now()}`;
+    const newSubtask = { id: newSubId, content: newSubtaskContent, completed: false };
+    
+    setData({
+      ...data,
+      tasks: {
+        ...data.tasks,
+        [taskId]: {
+          ...data.tasks[taskId],
+          subtasks: [...(data.tasks[taskId].subtasks || []), newSubtask],
+        },
+      },
+    });
+    setNewSubtaskContent('');
+  };
+
+  const toggleSubtask = (taskId, subId) => {
+    const task = data.tasks[taskId];
+    const newSubtasks = task.subtasks.map(sub => 
+      sub.id === subId ? { ...sub, completed: !sub.completed } : sub
+    );
+    
+    setData({
+      ...data,
+      tasks: {
+        ...data.tasks,
+        [taskId]: { ...task, subtasks: newSubtasks },
+      },
+    });
+  };
+
+  const handleDeleteSubtask = (taskId, subId) => {
+    const task = data.tasks[taskId];
+    const newSubtasks = task.subtasks.filter(sub => sub.id !== subId);
+    
+    setData({
+      ...data,
+      tasks: {
+        ...data.tasks,
+        [taskId]: { ...task, subtasks: newSubtasks },
+      },
+    });
+  };
+
+  const handleToggleTag = (taskId, tag) => {
+    const task = data.tasks[taskId];
+    const tags = task.tags || [];
+    const newTags = tags.includes(tag) 
+      ? tags.filter(t => t !== tag) 
+      : [...tags, tag];
+      
+    setData({
+      ...data,
+      tasks: {
+        ...data.tasks,
+        [taskId]: { ...task, tags: newTags },
+      },
+    });
   };
 
   const handleAddColumn = () => {
@@ -430,21 +529,104 @@ function App() {
                             >
                               <div className="flex items-start justify-between">
                                   {editingTaskId === task.id ? (
-                                    <div className="w-full space-y-2">
+                                    <div className="w-full space-y-3 p-2 bg-slate-50 rounded-xl border border-indigo-100 shadow-inner">
                                       <textarea
                                         autoFocus
-                                        className="text-sm font-medium leading-relaxed text-slate-700 w-full bg-slate-50 rounded p-1 focus:outline-none"
+                                        className="text-sm font-semibold leading-relaxed text-slate-700 w-full bg-white border border-slate-200 rounded-lg p-2 focus:ring-2 focus:ring-indigo-400 focus:outline-none"
                                         value={editingTaskContent}
                                         onChange={(e) => setEditingTaskContent(e.target.value)}
-                                        onKeyDown={(e) => e.key === 'Enter' && !e.shiftKey && handleUpdateTask(task.id, editingTaskContent, editingTaskDate)}
+                                        rows={2}
                                       />
-                                      <input 
-                                        type="date"
-                                        className="text-xs text-slate-500 bg-slate-50 rounded px-2 py-1 focus:outline-none w-full border border-slate-200"
-                                        value={editingTaskDate}
-                                        onChange={(e) => setEditingTaskDate(e.target.value)}
-                                        onBlur={() => handleUpdateTask(task.id, editingTaskContent, editingTaskDate)}
-                                      />
+                                      
+                                      <div className="flex items-center space-x-2">
+                                        <div className="flex-grow">
+                                          <label className="text-[10px] font-bold text-slate-400 uppercase mb-1 block">Due Date</label>
+                                          <input 
+                                            type="date"
+                                            className="text-xs text-slate-600 bg-white rounded-lg px-2 py-1.5 focus:outline-none w-full border border-slate-200"
+                                            value={editingTaskDate}
+                                            onChange={(e) => setEditingTaskDate(e.target.value)}
+                                          />
+                                        </div>
+                                        <div className="w-1/3">
+                                          <label className="text-[10px] font-bold text-slate-400 uppercase mb-1 block">Priority</label>
+                                          <button 
+                                            onClick={() => togglePriority(task.id)}
+                                            className={`w-full text-[10px] font-bold py-1.5 rounded-lg border transition-all ${priorityColors[task.priority || 'low']}`}
+                                          >
+                                            {(task.priority || 'low').toUpperCase()}
+                                          </button>
+                                        </div>
+                                      </div>
+
+                                      {/* Tag Editor */}
+                                      <div>
+                                        <label className="text-[10px] font-bold text-slate-400 uppercase mb-1 block">Tags</label>
+                                        <div className="flex flex-wrap gap-1">
+                                          {Object.keys(tagColors).map(tag => (
+                                            <button
+                                              key={tag}
+                                              onClick={() => handleToggleTag(task.id, tag)}
+                                              className={`text-[9px] font-bold px-2 py-1 rounded-md border transition-all ${
+                                                (task.tags || []).includes(tag) 
+                                                  ? tagColors[tag] 
+                                                  : 'bg-white text-slate-400 border-slate-200 hover:border-indigo-300'
+                                              }`}
+                                            >
+                                              {tag}
+                                            </button>
+                                          ))}
+                                        </div>
+                                      </div>
+
+                                      {/* Subtask Editor */}
+                                      <div className="space-y-2">
+                                        <label className="text-[10px] font-bold text-slate-400 uppercase mb-1 block">Subtasks</label>
+                                        {(task.subtasks || []).map(sub => (
+                                          <div key={sub.id} className="flex items-center group/sub bg-white p-1.5 rounded-lg border border-slate-100">
+                                            <button 
+                                              onClick={() => toggleSubtask(task.id, sub.id)}
+                                              className={`mr-2 transition-colors ${sub.completed ? 'text-green-500' : 'text-slate-300 hover:text-indigo-400'}`}
+                                            >
+                                              {sub.completed ? <CheckSquare size={14} /> : <Square size={14} />}
+                                            </button>
+                                            <span className={`text-xs flex-grow ${sub.completed ? 'text-slate-400 line-through' : 'text-slate-600'}`}>
+                                              {sub.content}
+                                            </span>
+                                            <button 
+                                              onClick={() => handleDeleteSubtask(task.id, sub.id)}
+                                              className="opacity-0 group-hover/sub:opacity-100 p-1 text-slate-300 hover:text-red-400 transition-all"
+                                            >
+                                              <X size={12} />
+                                            </button>
+                                          </div>
+                                        ))}
+                                        <div className="relative">
+                                          <input 
+                                            type="text"
+                                            placeholder="Add a subtask..."
+                                            className="text-xs bg-white border border-slate-200 rounded-lg px-2 py-2 w-full focus:ring-2 focus:ring-indigo-400 focus:outline-none pr-8"
+                                            value={newSubtaskContent}
+                                            onChange={(e) => setNewSubtaskContent(e.target.value)}
+                                            onKeyDown={(e) => e.key === 'Enter' && handleAddSubtask(task.id)}
+                                          />
+                                          <button 
+                                            onClick={() => handleAddSubtask(task.id)}
+                                            className="absolute right-2 top-1/2 -translate-y-1/2 text-indigo-500 hover:text-indigo-700"
+                                          >
+                                            <Plus size={14} />
+                                          </button>
+                                        </div>
+                                      </div>
+
+                                      <div className="pt-2 flex justify-end">
+                                        <button 
+                                          onClick={() => handleUpdateTask(task.id, editingTaskContent, editingTaskDate)}
+                                          className="text-xs font-bold bg-indigo-500 text-white px-4 py-2 rounded-lg hover:bg-indigo-600 shadow-sm active:scale-95 transition-all"
+                                        >
+                                          Save & Close
+                                        </button>
+                                      </div>
                                     </div>
                                   ) : (
                                     <p 
@@ -465,6 +647,40 @@ function App() {
                                     <Trash2 size={14} className="text-red-400 hover:text-red-600" />
                                   </button>
                               </div>
+
+                              {/* Tags Display */}
+                              {(task.tags && task.tags.length > 0) && (
+                                <div className="mt-2 flex flex-wrap gap-1">
+                                  {task.tags.map(tag => (
+                                    <span 
+                                      key={tag} 
+                                      className={`text-[9px] font-bold px-1.5 py-0.5 rounded-md border ${tagColors[tag] || 'bg-slate-100 text-slate-500'}`}
+                                    >
+                                      {tag.toUpperCase()}
+                                    </span>
+                                  ))}
+                                </div>
+                              )}
+
+                              {/* Subtasks Progress */}
+                              {task.subtasks && task.subtasks.length > 0 && (
+                                <div className="mt-3 space-y-2">
+                                  <div className="flex items-center justify-between text-[10px] font-bold text-slate-400">
+                                    <div className="flex items-center space-x-1">
+                                      <CheckCircle2 size={12} className={task.subtasks.every(s => s.completed) ? 'text-green-500' : 'text-slate-300'} />
+                                      <span>{task.subtasks.filter(s => s.completed).length}/{task.subtasks.length} subtasks</span>
+                                    </div>
+                                    <span>{Math.round((task.subtasks.filter(s => s.completed).length / task.subtasks.length) * 100)}%</span>
+                                  </div>
+                                  <div className="h-1 w-full bg-slate-100 rounded-full overflow-hidden">
+                                    <div 
+                                      className="h-full bg-indigo-500 transition-all duration-500" 
+                                      style={{ width: `${(task.subtasks.filter(s => s.completed).length / task.subtasks.length) * 100}%` }}
+                                    ></div>
+                                  </div>
+                                </div>
+                              )}
+
                               <div className="mt-3 flex items-center space-x-2">
                                 <div className="h-1.5 w-8 rounded-full bg-indigo-100 group-hover:bg-indigo-200"></div>
                                 <div className="h-1 w-1 rounded-full bg-slate-300"></div>
