@@ -20,6 +20,13 @@ const tagColors = {
   urgent: 'bg-orange-500/20 text-orange-600 border-orange-200',
 };
 
+const defaultMembers = [
+  { id: 'm1', name: 'Ronald', avatar: 'RO', color: 'bg-indigo-500' },
+  { id: 'm2', name: 'Alex', avatar: 'AL', color: 'bg-emerald-500' },
+  { id: 'm3', name: 'Jordan', avatar: 'JO', color: 'bg-amber-500' },
+  { id: 'm4', name: 'Sam', avatar: 'SA', color: 'bg-rose-500' },
+];
+
 const initialData = {
   tasks: {
     'task-1': { 
@@ -68,6 +75,8 @@ const initialData = {
     },
   },
   columnOrder: ['column-1', 'column-2', 'column-3'],
+  members: defaultMembers,
+  history: [],
 };
 
 function App() {
@@ -102,6 +111,111 @@ function App() {
   useEffect(() => {
     localStorage.setItem('kanban-theme', theme);
   }, [theme]);
+
+  // Timer Effect
+  useEffect(() => {
+    const interval = setInterval(() => {
+      setData(prevData => {
+        const anyTimerRunning = Object.values(prevData.tasks).some(t => t.timerRunning);
+        if (!anyTimerRunning) return prevData;
+
+        const updatedTasks = { ...prevData.tasks };
+        Object.keys(updatedTasks).forEach(id => {
+          if (updatedTasks[id].timerRunning) {
+            updatedTasks[id] = {
+              ...updatedTasks[id],
+              totalTime: (updatedTasks[id].totalTime || 0) + 1,
+            };
+          }
+        });
+
+        return { ...prevData, tasks: updatedTasks };
+      });
+    }, 1000);
+
+    return () => clearInterval(interval);
+  }, []);
+
+  const addHistoryLog = (type, taskId, content) => {
+    const newLog = {
+      id: `log-${Date.now()}-${Math.random().toString(36).substr(2, 9)}`,
+      type,
+      taskId,
+      content,
+      timestamp: new Date().toISOString(),
+    };
+    
+    setData(prev => ({
+      ...prev,
+      history: [newLog, ...(prev.history || [])].slice(0, 100), // Keep last 100 logs
+    }));
+  };
+
+  const handleExport = () => {
+    const dataStr = JSON.stringify(data, null, 2);
+    const blob = new Blob([dataStr], { type: 'application/json' });
+    const url = URL.createObjectURL(blob);
+    const link = document.createElement('a');
+    link.href = url;
+    link.download = `kanban-export-${new Date().toISOString().split('T')[0]}.json`;
+    link.click();
+    URL.revokeObjectURL(url);
+  };
+
+  const handleImport = (e) => {
+    const file = e.target.files[0];
+    if (!file) return;
+
+    const reader = new FileReader();
+    reader.onload = (event) => {
+      try {
+        const importedData = JSON.parse(event.target.result);
+        // Basic validation
+        if (importedData.tasks && importedData.columns && importedData.columnOrder) {
+          setData(importedData);
+          alert('Data imported successfully!');
+        } else {
+          alert('Invalid file format.');
+        }
+      } catch (err) {
+        alert('Error parsing JSON file.');
+      }
+    };
+    reader.readAsText(file);
+  };
+
+  const toggleTimer = (taskId) => {
+    const task = data.tasks[taskId];
+    const isStarting = !task.timerRunning;
+    
+    setData(prev => ({
+      ...prev,
+      tasks: {
+        ...prev.tasks,
+        [taskId]: {
+          ...task,
+          timerRunning: isStarting,
+        }
+      }
+    }));
+
+    addHistoryLog(
+      isStarting ? 'timer_start' : 'timer_stop',
+      taskId,
+      isStarting ? 'Temporizador iniciado' : `Temporizador detenido (${formatTime(task.totalTime || 0)})`
+    );
+  };
+
+  const formatTime = (seconds) => {
+    const hrs = Math.floor(seconds / 3600);
+    const mins = Math.floor((seconds % 3600) / 60);
+    const secs = seconds % 60;
+    return [
+      hrs > 0 ? String(hrs).padStart(2, '0') : null,
+      String(mins).padStart(2, '0'),
+      String(secs).padStart(2, '0')
+    ].filter(Boolean).join(':');
+  };
 
   const onDragEnd = (result) => {
     const { destination, source, draggableId } = result;
@@ -164,6 +278,14 @@ function App() {
       },
     };
     setData(newState);
+
+    if (source.droppableId !== destination.droppableId) {
+      addHistoryLog(
+        'task_move',
+        draggableId,
+        `Tarea movida de "${start.title}" a "${finish.title}"`
+      );
+    }
   };
 
   const handleAddTask = (columnId) => {
@@ -198,6 +320,7 @@ function App() {
     };
 
     setData(newState);
+    addHistoryLog('task_create', newTaskId, `Tarea creada: "${newTaskContent}"`);
     setNewTaskContent('');
     setNewTaskDate('');
     setEditingColumn(null);
@@ -223,6 +346,7 @@ function App() {
     };
 
     setData(newState);
+    addHistoryLog('task_delete', taskId, `Tarea eliminada`);
   };
 
   const handleUpdateTask = (taskId, newContent, newDate) => {
@@ -239,6 +363,7 @@ function App() {
       },
     };
     setData(newState);
+    addHistoryLog('task_update', taskId, `Tarea actualizada: "${newContent}"`);
     setEditingTaskId(null);
     setEditingTaskDate('');
   };
@@ -259,6 +384,7 @@ function App() {
       },
     };
     setData(newState);
+    addHistoryLog('priority_change', taskId, `Prioridad cambiada a ${nextPriority}`);
   };
 
   const handleAddSubtask = (taskId) => {
@@ -276,6 +402,7 @@ function App() {
         },
       },
     });
+    addHistoryLog('subtask_add', taskId, `Subtarea añadida: "${newSubtaskContent}"`);
     setNewSubtaskContent('');
   };
 
@@ -341,6 +468,7 @@ function App() {
       columnOrder: [...data.columnOrder, newColumnId],
     };
     setData(newState);
+    addHistoryLog('column_create', null, `Nueva lista creada: "${newColTitle}"`);
     setNewColTitle('');
     setIsAddingColumn(false);
   };
@@ -355,6 +483,7 @@ function App() {
       columns: newColumns,
       columnOrder: newColumnOrder,
     });
+    addHistoryLog('column_delete', null, `Lista eliminada`);
   };
 
   const handleUpdateColumnTitle = (columnId) => {
@@ -369,6 +498,7 @@ function App() {
         },
       },
     });
+    addHistoryLog('column_rename', null, `Lista renombrada a "${editingColTitle}"`);
     setEditingColTitleId(null);
   };
 
@@ -406,6 +536,24 @@ function App() {
         </div>
 
         <div className="flex items-center space-x-3">
+          <div className="flex items-center bg-white/10 rounded-xl p-1 border border-white/20">
+            <button 
+              onClick={handleExport}
+              className="p-2 rounded-lg text-white/60 hover:text-white hover:bg-white/10 transition-all flex items-center space-x-1"
+              title="Exportar Tablero"
+            >
+              <ArrowDown size={18} />
+              <span className="text-[10px] font-bold uppercase hidden md:inline">Exportar</span>
+            </button>
+            <label className="p-2 rounded-lg text-white/60 hover:text-white hover:bg-white/10 transition-all cursor-pointer flex items-center space-x-1" title="Importar Tablero">
+              <ArrowUp size={18} />
+              <span className="text-[10px] font-bold uppercase hidden md:inline">Importar</span>
+              <input type="file" accept=".json" onChange={handleImport} className="hidden" />
+            </label>
+          </div>
+
+          <div className="h-8 w-[1px] bg-white/20 mx-2"></div>
+
           <div className="flex items-center bg-white/10 rounded-xl p-1 border border-white/20">
             {Object.keys(themes).map((t) => (
               <button
@@ -559,23 +707,47 @@ function App() {
                                         </div>
                                       </div>
 
-                                      {/* Tag Editor */}
-                                      <div>
-                                        <label className="text-[10px] font-bold text-slate-400 uppercase mb-1 block">Tags</label>
-                                        <div className="flex flex-wrap gap-1">
-                                          {Object.keys(tagColors).map(tag => (
-                                            <button
-                                              key={tag}
-                                              onClick={() => handleToggleTag(task.id, tag)}
-                                              className={`text-[9px] font-bold px-2 py-1 rounded-md border transition-all ${
-                                                (task.tags || []).includes(tag) 
-                                                  ? tagColors[tag] 
-                                                  : 'bg-white text-slate-400 border-slate-200 hover:border-indigo-300'
-                                              }`}
-                                            >
-                                              {tag}
-                                            </button>
-                                          ))}
+                                      {/* Member & Tag Editor Row */}
+                                      <div className="flex space-x-3">
+                                        <div className="flex-grow">
+                                          <label className="text-[10px] font-bold text-slate-400 uppercase mb-1 block">Asignado a</label>
+                                          <div className="flex flex-wrap gap-2">
+                                            {(data.members || defaultMembers).map(member => (
+                                              <button
+                                                key={member.id}
+                                                onClick={() => {
+                                                  const newTask = { ...data.tasks[task.id], assignedTo: member.id };
+                                                  setData({
+                                                    ...data,
+                                                    tasks: { ...data.tasks, [task.id]: newTask }
+                                                  });
+                                                  addHistoryLog('member_assign', task.id, `Asignado a ${member.name}`);
+                                                }}
+                                                className={`w-7 h-7 rounded-full flex items-center justify-center text-[9px] font-bold text-white transition-all ring-offset-1 ${member.color} ${task.assignedTo === member.id ? 'ring-2 ring-indigo-500 scale-110 shadow-md' : 'opacity-40 hover:opacity-100 hover:scale-105'}`}
+                                                title={member.name}
+                                              >
+                                                {member.avatar}
+                                              </button>
+                                            ))}
+                                          </div>
+                                        </div>
+                                        <div className="w-1/2">
+                                          <label className="text-[10px] font-bold text-slate-400 uppercase mb-1 block">Tags</label>
+                                          <div className="flex flex-wrap gap-1">
+                                            {Object.keys(tagColors).map(tag => (
+                                              <button
+                                                key={tag}
+                                                onClick={() => handleToggleTag(task.id, tag)}
+                                                className={`text-[9px] font-bold px-2 py-1 rounded-md border transition-all ${
+                                                  (task.tags || []).includes(tag) 
+                                                    ? tagColors[tag] 
+                                                    : 'bg-white text-slate-400 border-slate-200 hover:border-indigo-300'
+                                                }`}
+                                              >
+                                                {tag}
+                                              </button>
+                                            ))}
+                                          </div>
                                         </div>
                                       </div>
 
@@ -619,33 +791,67 @@ function App() {
                                         </div>
                                       </div>
 
-                                      <div className="pt-2 flex justify-end">
+                                      {/* History Log */}
+                                      <div className="space-y-2 mt-4">
+                                        <label className="text-[10px] font-bold text-slate-400 uppercase mb-1 block">Historial Reciente</label>
+                                        <div className="max-h-32 overflow-y-auto space-y-2 pr-2 custom-scrollbar">
+                                          {(data.history || [])
+                                            .filter(log => log.taskId === task.id)
+                                            .slice(0, 5)
+                                            .map(log => (
+                                              <div key={log.id} className="text-[10px] text-slate-500 flex items-start space-x-2 border-l-2 border-slate-100 pl-2">
+                                                <span className="font-bold whitespace-nowrap">{new Date(log.timestamp).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}:</span>
+                                                <span>{log.content}</span>
+                                              </div>
+                                            ))}
+                                          {(!data.history || data.history.filter(log => log.taskId === task.id).length === 0) && (
+                                            <p className="text-[10px] text-slate-400 italic">Sin actividad registrada aún.</p>
+                                          )}
+                                        </div>
+                                      </div>
+
+                                      <div className="pt-4 flex justify-between items-center border-t border-slate-100 mt-4">
+                                        <div className="flex items-center space-x-2 text-slate-500">
+                                          <Clock size={14} />
+                                          <span className="text-xs font-bold font-mono">{formatTime(task.totalTime || 0)}</span>
+                                        </div>
                                         <button 
                                           onClick={() => handleUpdateTask(task.id, editingTaskContent, editingTaskDate)}
                                           className="text-xs font-bold bg-indigo-500 text-white px-4 py-2 rounded-lg hover:bg-indigo-600 shadow-sm active:scale-95 transition-all"
                                         >
-                                          Save & Close
+                                          Cerrar y Guardar
                                         </button>
                                       </div>
                                     </div>
                                   ) : (
-                                    <p 
-                                      onClick={() => {
-                                        setEditingTaskId(task.id);
-                                        setEditingTaskContent(task.content);
-                                        setEditingTaskDate(task.dueDate || '');
-                                      }}
-                                      className="text-sm font-medium leading-relaxed text-slate-700 cursor-pointer flex-grow"
-                                    >
-                                      {task.content}
-                                    </p>
+                                    <>
+                                      <p 
+                                        onClick={() => {
+                                          setEditingTaskId(task.id);
+                                          setEditingTaskContent(task.content);
+                                          setEditingTaskDate(task.dueDate || '');
+                                        }}
+                                        className="text-sm font-medium leading-relaxed text-slate-700 cursor-pointer flex-grow"
+                                      >
+                                        {task.content}
+                                      </p>
+                                      <div className="flex items-center space-x-1 ml-2">
+                                        <button 
+                                          onClick={() => toggleTimer(task.id)}
+                                          className={`p-1.5 rounded-lg transition-all ${task.timerRunning ? 'bg-rose-100 text-rose-600 animate-pulse' : 'bg-slate-100 text-slate-400 hover:text-indigo-600'}`}
+                                          title={task.timerRunning ? 'Pausar' : 'Iniciar tiempo'}
+                                        >
+                                          {task.timerRunning ? <CircleDot size={14} /> : <Circle size={14} />}
+                                        </button>
+                                        <button 
+                                          onClick={() => handleDeleteTask(column.id, task.id)}
+                                          className="translate-x-2 opacity-0 transition-all group-hover:translate-x-0 group-hover:opacity-100 p-1.5 text-red-400 hover:text-red-600"
+                                        >
+                                          <Trash2 size={14} />
+                                        </button>
+                                      </div>
+                                    </>
                                   )}
-                                  <button 
-                                    onClick={() => handleDeleteTask(column.id, task.id)}
-                                    className="ml-2 translate-x-2 opacity-0 transition-all group-hover:translate-x-0 group-hover:opacity-100"
-                                  >
-                                    <Trash2 size={14} className="text-red-400 hover:text-red-600" />
-                                  </button>
                               </div>
 
                               {/* Tags Display */}
@@ -679,31 +885,44 @@ function App() {
                                     ></div>
                                   </div>
                                 </div>
-                              )}
-
-                              <div className="mt-3 flex items-center space-x-2">
-                                <div className="h-1.5 w-8 rounded-full bg-indigo-100 group-hover:bg-indigo-200"></div>
-                                <div className="h-1 w-1 rounded-full bg-slate-300"></div>
-                                <button 
-                                  onClick={(e) => {
-                                    e.stopPropagation();
-                                    togglePriority(task.id);
-                                  }}
-                                  className={`text-[9px] font-bold px-2 py-0.5 rounded uppercase transition-colors ${priorityColors[task.priority || 'low']}`}
-                                >
-                                  {(task.priority || 'low')} Priority
-                                </button>
-                                {task.dueDate && (
-                                  <div className={`flex items-center space-x-1 text-[10px] font-bold px-2 py-0.5 rounded ${
-                                    new Date(task.dueDate) < new Date(new Date().setHours(0,0,0,0)) 
-                                    ? 'bg-red-100 text-red-600' 
-                                    : 'bg-slate-100 text-slate-500'
-                                  }`}>
-                                    <Clock size={10} />
-                                    <span>{new Date(task.dueDate).toLocaleDateString(undefined, { month: 'short', day: 'numeric' })}</span>
+                              )}                                <div className="mt-3 flex items-center justify-between">
+                                  <div className="flex items-center space-x-2">
+                                    <div className="flex items-center space-x-1 text-[10px] font-bold text-slate-400 bg-slate-50 px-2 py-1 rounded-md">
+                                      <Clock size={10} className={task.timerRunning ? 'text-indigo-500' : ''} />
+                                      <span className="font-mono">{formatTime(task.totalTime || 0)}</span>
+                                    </div>
+                                    <button 
+                                      onClick={(e) => {
+                                        e.stopPropagation();
+                                        togglePriority(task.id);
+                                      }}
+                                      className={`text-[9px] font-bold px-2 py-1 rounded uppercase transition-colors ${priorityColors[task.priority || 'low']}`}
+                                    >
+                                      {task.priority || 'low'}
+                                    </button>
+                                    {task.dueDate && (
+                                      <div className={`flex items-center space-x-1 text-[10px] font-bold px-2 py-1 rounded ${
+                                        new Date(task.dueDate) < new Date(new Date().setHours(0,0,0,0)) 
+                                        ? 'bg-red-100 text-red-600' 
+                                        : 'bg-slate-100 text-slate-500'
+                                      }`}>
+                                        <Calendar size={10} />
+                                        <span>{new Date(task.dueDate).toLocaleDateString(undefined, { month: 'short', day: 'numeric' })}</span>
+                                      </div>
+                                    )}
                                   </div>
-                                )}
-                              </div>
+                                  
+                                  {task.assignedTo && (
+                                    <div 
+                                      className={`w-6 h-6 rounded-full flex items-center justify-center text-[9px] font-bold text-white shadow-sm ring-1 ring-white ${
+                                        (data.members || defaultMembers).find(m => m.id === task.assignedTo)?.color || 'bg-slate-400'
+                                      }`}
+                                      title={(data.members || defaultMembers).find(m => m.id === task.assignedTo)?.name}
+                                    >
+                                      {(data.members || defaultMembers).find(m => m.id === task.assignedTo)?.avatar}
+                                    </div>
+                                  )}
+                                </div>
                             </div>
                           )}
                         </Draggable>
