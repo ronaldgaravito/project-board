@@ -1,6 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { DragDropContext, Droppable, Draggable } from '@hello-pangea/dnd';
-import { MoreHorizontal, Plus, Trash2, Calendar, Filter, Palette, CheckCircle2, Clock, AlertTriangle, Tag, CheckSquare, Square, X, Pencil, Check, ArrowRight, ArrowLeft, ArrowDown, ArrowUp, GripVertical, ListTodo, CircleDot, Circle } from 'lucide-react';
+import { MoreHorizontal, Plus, Trash2, Calendar, Filter, Palette, CheckCircle2, Clock, AlertTriangle, Tag, CheckSquare, Square, X, Pencil, Check, ArrowRight, ArrowLeft, ArrowDown, ArrowUp, GripVertical, ListTodo, CircleDot, Circle, History } from 'lucide-react';
 
 const themes = {
   indigo: 'linear-gradient(135deg, #667eea 0%, #764ba2 100%)',
@@ -103,6 +103,7 @@ function App() {
   const [newColTitle, setNewColTitle] = useState('');
   const [newSubtaskContent, setNewSubtaskContent] = useState('');
   const [isAddingTag, setIsAddingTag] = useState(null); // taskId
+  const [isHistoryOpen, setIsHistoryOpen] = useState(false);
 
   useEffect(() => {
     localStorage.setItem('kanban-data', JSON.stringify(data));
@@ -437,9 +438,10 @@ function App() {
   const handleToggleTag = (taskId, tag) => {
     const task = data.tasks[taskId];
     const tags = task.tags || [];
-    const newTags = tags.includes(tag) 
-      ? tags.filter(t => t !== tag) 
-      : [...tags, tag];
+    const isAdding = !tags.includes(tag);
+    const newTags = isAdding
+      ? [...tags, tag]
+      : tags.filter(t => t !== tag);
       
     setData({
       ...data,
@@ -448,6 +450,7 @@ function App() {
         [taskId]: { ...task, tags: newTags },
       },
     });
+    addHistoryLog('tag_change', taskId, `${isAdding ? 'Etiqueta añadida' : 'Etiqueta eliminada'}: "${tag}"`);
   };
 
   const handleAddColumn = () => {
@@ -591,6 +594,16 @@ function App() {
               <Clock size={18} />
             </button>
           </div>
+          
+          <div className="h-8 w-[1px] bg-white/20 mx-2"></div>
+
+          <button 
+            onClick={() => setIsHistoryOpen(!isHistoryOpen)}
+            className={`p-2 rounded-xl transition-all border ${isHistoryOpen ? 'bg-white text-indigo-600 border-white' : 'bg-white/10 text-white/60 border-white/20 hover:text-white hover:bg-white/10'}`}
+            title="Actividad del Tablero"
+          >
+            <History size={18} />
+          </button>
           
           <div className="h-8 w-8 rounded-full bg-gradient-to-tr from-pink-400 to-yellow-300 ring-2 ring-white/20 ml-4"></div>
         </div>
@@ -1033,6 +1046,74 @@ function App() {
           )}
         </div>
       </DragDropContext>
+
+      {/* History Sidebar */}
+      <div className={`fixed top-0 right-0 h-full w-80 bg-white/95 backdrop-blur-xl shadow-2xl transition-transform duration-500 ease-in-out z-50 transform ${isHistoryOpen ? 'translate-x-0' : 'translate-x-full'} border-l border-white/20 text-slate-800 flex flex-col`}>
+        <div className="p-6 border-b border-slate-100 flex items-center justify-between">
+          <div className="flex items-center space-x-2">
+            <History className="text-indigo-500" size={20} />
+            <h2 className="text-lg font-bold tracking-tight">Actividad Reciente</h2>
+          </div>
+          <button 
+            onClick={() => setIsHistoryOpen(false)}
+            className="p-2 rounded-full hover:bg-slate-100 transition-colors text-slate-400"
+          >
+            <X size={20} />
+          </button>
+        </div>
+        
+        <div className="flex-grow overflow-y-auto p-6 space-y-6 custom-scrollbar">
+          {data.history && data.history.length > 0 ? (
+            data.history.map((log, index) => {
+              const task = log.taskId ? data.tasks[log.taskId] : null;
+              
+              return (
+                <div key={log.id} className="relative pl-6 pb-2">
+                  {index !== data.history.length - 1 && (
+                    <div className="absolute left-[9px] top-4 bottom-0 w-[2px] bg-slate-100"></div>
+                  )}
+                  <div className="absolute left-0 top-1 w-[20px] h-[20px] rounded-full bg-white border-2 border-indigo-500 flex items-center justify-center z-10 shadow-sm">
+                    {log.type === 'task_move' && <ArrowRight size={10} className="text-indigo-500" />}
+                    {log.type === 'task_create' && <Plus size={10} className="text-indigo-500" />}
+                    {log.type === 'task_delete' && <Trash2 size={10} className="text-rose-500" />}
+                    {(!['task_move', 'task_create', 'task_delete'].includes(log.type)) && <Circle size={8} className="text-indigo-300 fill-indigo-300" />}
+                  </div>
+                  
+                  <div className="space-y-1">
+                    <div className="flex items-center justify-between">
+                      <span className="text-[10px] font-bold text-slate-400 uppercase tracking-wider">
+                        {new Date(log.timestamp).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
+                      </span>
+                      <span className="text-[9px] font-medium text-slate-300">
+                        {new Date(log.timestamp).toLocaleDateString()}
+                      </span>
+                    </div>
+                    <p className="text-sm font-medium text-slate-700 leading-snug">
+                      {log.content}
+                    </p>
+                    {task && (
+                      <div className="text-[10px] bg-indigo-50 text-indigo-600 px-2 py-0.5 rounded inline-block font-bold">
+                        Tarea: {task.content.length > 30 ? task.content.substring(0, 30) + '...' : task.content}
+                      </div>
+                    )}
+                  </div>
+                </div>
+              );
+            })
+          ) : (
+            <div className="h-full flex flex-col items-center justify-center text-center space-y-3 opacity-40">
+              <History size={48} className="text-slate-300" />
+              <p className="text-sm font-medium text-slate-500">No hay actividad registrada aún en este tablero.</p>
+            </div>
+          )}
+        </div>
+        
+        <div className="p-6 border-t border-slate-100 bg-slate-50/50">
+          <p className="text-[10px] text-slate-400 italic text-center">
+            Se mantienen los últimos 100 eventos de actividad.
+          </p>
+        </div>
+      </div>
     </div>
   );
 }
