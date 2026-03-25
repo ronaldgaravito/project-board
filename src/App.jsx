@@ -97,6 +97,7 @@ function App() {
   const [editingTaskId, setEditingTaskId] = useState(null);
   const [editingTaskContent, setEditingTaskContent] = useState('');
   const [editingTaskDate, setEditingTaskDate] = useState('');
+  const [editingTaskDescription, setEditingTaskDescription] = useState('');
   const [editingColTitleId, setEditingColTitleId] = useState(null);
   const [editingColTitle, setEditingColTitle] = useState('');
   const [isAddingColumn, setIsAddingColumn] = useState(false);
@@ -104,6 +105,8 @@ function App() {
   const [newSubtaskContent, setNewSubtaskContent] = useState('');
   const [isAddingTag, setIsAddingTag] = useState(null); // taskId
   const [isHistoryOpen, setIsHistoryOpen] = useState(false);
+  const [showArchived, setShowArchived] = useState(false);
+  const [isStatsOpen, setIsStatsOpen] = useState(false);
 
   useEffect(() => {
     localStorage.setItem('kanban-data', JSON.stringify(data));
@@ -350,7 +353,7 @@ function App() {
     addHistoryLog('task_delete', taskId, `Tarea eliminada`);
   };
 
-  const handleUpdateTask = (taskId, newContent, newDate) => {
+  const handleUpdateTask = (taskId, newContent, newDate, newDescription) => {
     if (!newContent.trim()) return;
     const newState = {
       ...data,
@@ -360,6 +363,7 @@ function App() {
           ...data.tasks[taskId],
           content: newContent,
           dueDate: newDate !== undefined ? newDate : data.tasks[taskId].dueDate,
+          description: newDescription !== undefined ? newDescription : data.tasks[taskId].description,
         },
       },
     };
@@ -367,6 +371,7 @@ function App() {
     addHistoryLog('task_update', taskId, `Tarea actualizada: "${newContent}"`);
     setEditingTaskId(null);
     setEditingTaskDate('');
+    setEditingTaskDescription('');
   };
 
   const togglePriority = (taskId) => {
@@ -593,6 +598,13 @@ function App() {
             >
               <Clock size={18} />
             </button>
+            <button 
+              onClick={() => setShowArchived(!showArchived)}
+              className={`p-2 rounded-lg transition-all ${showArchived ? 'bg-slate-500/40 text-white' : 'text-white/60 hover:text-white'}`}
+              title={showArchived ? "Ocultar Archivados" : "Mostrar Archivados"}
+            >
+              <History size={18} className={showArchived ? "rotate-180 transition-transform" : "transition-transform"} />
+            </button>
           </div>
           
           <div className="h-8 w-[1px] bg-white/20 mx-2"></div>
@@ -603,6 +615,17 @@ function App() {
             title="Actividad del Tablero"
           >
             <History size={18} />
+          </button>
+          
+          <button 
+            onClick={() => {
+              setIsStatsOpen(!isStatsOpen);
+              setIsHistoryOpen(false);
+            }}
+            className={`p-2 rounded-xl transition-all border ${isStatsOpen ? 'bg-white text-indigo-600 border-white' : 'bg-white/10 text-white/60 border-white/20 hover:text-white hover:bg-white/10'}`}
+            title="Estadísticas de Productividad"
+          >
+            <CircleDot size={18} />
           </button>
           
           <div className="h-8 w-8 rounded-full bg-gradient-to-tr from-pink-400 to-yellow-300 ring-2 ring-white/20 ml-4"></div>
@@ -619,6 +642,11 @@ function App() {
                 const matchesSearch = task.content.toLowerCase().includes(searchTerm.toLowerCase());
                 if (!matchesSearch) return false;
                 
+                // Excluir tareas archivadas si no se ha activado el filtro de archivados
+                if (task.archived && !showArchived) return false;
+                // Si estamos mostrando archivados, SOLO mostrar archivados (opcional, pero suele ser mejor para limpiar la vista)
+                if (showArchived && !task.archived) return false;
+
                 if (filterType === 'high') return task.priority === 'high';
                 if (filterType === 'overdue') {
                   if (!task.dueDate) return false;
@@ -684,19 +712,60 @@ function App() {
                               {...provided.draggableProps}
                               {...provided.dragHandleProps}
                               ref={provided.innerRef}
-                              className={`group mb-3 rounded-xl bg-white p-4 shadow-sm transition-all duration-200 hover:shadow-card-hover ${
+                              className={`group mb-3 rounded-xl bg-white p-4 shadow-sm transition-all duration-200 hover:shadow-card-hover relative ${
                                 snapshot.isDragging ? 'rotate-2 scale-105 shadow-2xl ring-2 ring-indigo-400' : ''
-                              }`}
+                              } ${task.archived ? 'opacity-60 bg-slate-50 border-dashed border border-slate-200 shadow-none' : ''}`}
                             >
                               <div className="flex items-start justify-between">
+                                {!editingTaskId && (
+                                  <div className="flex space-x-1 opacity-0 group-hover:opacity-100 transition-opacity absolute top-2 right-2 z-10">
+                                    <button 
+                                      onClick={(e) => {
+                                        e.stopPropagation();
+                                        const newState = {
+                                          ...data,
+                                          tasks: {
+                                            ...data.tasks,
+                                            [task.id]: { ...task, archived: !task.archived }
+                                          }
+                                        };
+                                        setData(newState);
+                                        addHistoryLog(task.archived ? 'task_unarchive' : 'task_archive', task.id, task.archived ? 'Tarea restaurada' : 'Tarea archivada');
+                                      }}
+                                      className="p-1.5 rounded-lg bg-white/80 backdrop-blur-sm text-slate-400 hover:text-indigo-600 hover:bg-indigo-50 transition-all border border-slate-100 shadow-sm"
+                                      title={task.archived ? "Restaurar" : "Archivar"}
+                                    >
+                                      <History size={14} />
+                                    </button>
+                                    <button 
+                                      onClick={(e) => {
+                                        e.stopPropagation();
+                                        handleDeleteTask(column.id, task.id);
+                                      }}
+                                      className="p-1.5 rounded-lg bg-white/80 backdrop-blur-sm text-slate-400 hover:text-red-600 hover:bg-red-50 transition-all border border-slate-100 shadow-sm"
+                                      title="Eliminar"
+                                    >
+                                      <Trash2 size={14} />
+                                    </button>
+                                  </div>
+                                )}
                                   {editingTaskId === task.id ? (
                                     <div className="w-full space-y-3 p-2 bg-slate-50 rounded-xl border border-indigo-100 shadow-inner">
                                       <textarea
                                         autoFocus
                                         className="text-sm font-semibold leading-relaxed text-slate-700 w-full bg-white border border-slate-200 rounded-lg p-2 focus:ring-2 focus:ring-indigo-400 focus:outline-none"
+                                        placeholder="Título de la tarea"
                                         value={editingTaskContent}
                                         onChange={(e) => setEditingTaskContent(e.target.value)}
                                         rows={2}
+                                      />
+                                      
+                                      <textarea
+                                        className="text-xs text-slate-500 w-full bg-white border border-slate-200 rounded-lg p-2 focus:ring-2 focus:ring-indigo-400 focus:outline-none"
+                                        placeholder="Añadir una descripción detallada..."
+                                        value={editingTaskDescription}
+                                        onChange={(e) => setEditingTaskDescription(e.target.value)}
+                                        rows={3}
                                       />
                                       
                                       <div className="flex items-center space-x-2">
@@ -764,45 +833,60 @@ function App() {
                                         </div>
                                       </div>
 
-                                      {/* Subtask Editor */}
-                                      <div className="space-y-2">
-                                        <label className="text-[10px] font-bold text-slate-400 uppercase mb-1 block">Subtasks</label>
-                                        {(task.subtasks || []).map(sub => (
-                                          <div key={sub.id} className="flex items-center group/sub bg-white p-1.5 rounded-lg border border-slate-100">
+                                        {/* Subtask Editor */}
+                                        <div className="space-y-2">
+                                          <div className="flex items-center justify-between">
+                                            <label className="text-[10px] font-bold text-slate-400 uppercase mb-1 block">Subtasks</label>
+                                            {task.subtasks && task.subtasks.length > 0 && (
+                                              <div className="flex flex-col items-end space-y-1">
+                                                <span className="text-[10px] font-bold text-indigo-500">
+                                                  {Math.round((task.subtasks.filter(s => s.completed).length / task.subtasks.length) * 100)}%
+                                                </span>
+                                                <div className="w-12 h-1 bg-slate-100 rounded-full overflow-hidden">
+                                                  <div 
+                                                    className="h-full bg-indigo-500 transition-all duration-500" 
+                                                    style={{ width: `${(task.subtasks.filter(s => s.completed).length / task.subtasks.length) * 100}%` }}
+                                                  />
+                                                </div>
+                                              </div>
+                                            )}
+                                          </div>
+                                          {(task.subtasks || []).map(sub => (
+                                            <div key={sub.id} className="flex items-center group/sub bg-white p-1.5 rounded-lg border border-slate-100">
+                                              <button 
+                                                onClick={() => toggleSubtask(task.id, sub.id)}
+                                                className={`mr-2 transition-colors ${sub.completed ? 'text-green-500' : 'text-slate-300 hover:text-indigo-400'}`}
+                                              >
+                                                {sub.completed ? <CheckSquare size={14} /> : <Square size={14} />}
+                                              </button>
+                                              <span className={`text-xs flex-grow ${sub.completed ? 'text-slate-400 line-through' : 'text-slate-600'}`}>
+                                                {sub.content}
+                                              </span>
+                                              <button 
+                                                onClick={() => handleDeleteSubtask(task.id, sub.id)}
+                                                className="opacity-0 group-hover/sub:opacity-100 p-1 text-slate-300 hover:text-red-400 transition-all"
+                                              >
+                                                <X size={12} />
+                                              </button>
+                                            </div>
+                                          ))}
+                                          <div className="relative">
+                                            <input 
+                                              type="text"
+                                              placeholder="Add a subtask..."
+                                              className="text-xs bg-white border border-slate-200 rounded-lg px-2 py-2 w-full focus:ring-2 focus:ring-indigo-400 focus:outline-none pr-8"
+                                              value={newSubtaskContent}
+                                              onChange={(e) => setNewSubtaskContent(e.target.value)}
+                                              onKeyDown={(e) => e.key === 'Enter' && handleAddSubtask(task.id)}
+                                            />
                                             <button 
-                                              onClick={() => toggleSubtask(task.id, sub.id)}
-                                              className={`mr-2 transition-colors ${sub.completed ? 'text-green-500' : 'text-slate-300 hover:text-indigo-400'}`}
+                                              onClick={() => handleAddSubtask(task.id)}
+                                              className="absolute right-2 top-1/2 -translate-y-1/2 text-indigo-500 hover:text-indigo-700"
                                             >
-                                              {sub.completed ? <CheckSquare size={14} /> : <Square size={14} />}
-                                            </button>
-                                            <span className={`text-xs flex-grow ${sub.completed ? 'text-slate-400 line-through' : 'text-slate-600'}`}>
-                                              {sub.content}
-                                            </span>
-                                            <button 
-                                              onClick={() => handleDeleteSubtask(task.id, sub.id)}
-                                              className="opacity-0 group-hover/sub:opacity-100 p-1 text-slate-300 hover:text-red-400 transition-all"
-                                            >
-                                              <X size={12} />
+                                              <Plus size={14} />
                                             </button>
                                           </div>
-                                        ))}
-                                        <div className="relative">
-                                          <input 
-                                            type="text"
-                                            placeholder="Add a subtask..."
-                                            className="text-xs bg-white border border-slate-200 rounded-lg px-2 py-2 w-full focus:ring-2 focus:ring-indigo-400 focus:outline-none pr-8"
-                                            value={newSubtaskContent}
-                                            onChange={(e) => setNewSubtaskContent(e.target.value)}
-                                            onKeyDown={(e) => e.key === 'Enter' && handleAddSubtask(task.id)}
-                                          />
-                                          <button 
-                                            onClick={() => handleAddSubtask(task.id)}
-                                            className="absolute right-2 top-1/2 -translate-y-1/2 text-indigo-500 hover:text-indigo-700"
-                                          >
-                                            <Plus size={14} />
-                                          </button>
                                         </div>
-                                      </div>
 
                                       {/* History Log */}
                                       <div className="space-y-2 mt-4">
@@ -829,7 +913,7 @@ function App() {
                                           <span className="text-xs font-bold font-mono">{formatTime(task.totalTime || 0)}</span>
                                         </div>
                                         <button 
-                                          onClick={() => handleUpdateTask(task.id, editingTaskContent, editingTaskDate)}
+                                          onClick={() => handleUpdateTask(task.id, editingTaskContent, editingTaskDate, editingTaskDescription)}
                                           className="text-xs font-bold bg-indigo-500 text-white px-4 py-2 rounded-lg hover:bg-indigo-600 shadow-sm active:scale-95 transition-all"
                                         >
                                           Cerrar y Guardar
@@ -838,16 +922,24 @@ function App() {
                                     </div>
                                   ) : (
                                     <>
-                                      <p 
+                                      <div 
                                         onClick={() => {
                                           setEditingTaskId(task.id);
                                           setEditingTaskContent(task.content);
                                           setEditingTaskDate(task.dueDate || '');
+                                          setEditingTaskDescription(task.description || '');
                                         }}
-                                        className="text-sm font-medium leading-relaxed text-slate-700 cursor-pointer flex-grow"
+                                        className="cursor-pointer flex-grow"
                                       >
-                                        {task.content}
-                                      </p>
+                                        <p className="text-sm font-medium leading-relaxed text-slate-700">
+                                          {task.content}
+                                        </p>
+                                        {task.description && (
+                                          <p className="text-[11px] text-slate-400 line-clamp-2 mt-1 leading-relaxed">
+                                            {task.description}
+                                          </p>
+                                        )}
+                                      </div>
                                       <div className="flex items-center space-x-1 ml-2">
                                         <button 
                                           onClick={() => toggleTimer(task.id)}
@@ -1112,6 +1204,78 @@ function App() {
           <p className="text-[10px] text-slate-400 italic text-center">
             Se mantienen los últimos 100 eventos de actividad.
           </p>
+        </div>
+      </div>
+      {/* Stats Sidebar */}
+      <div className={`fixed top-0 right-0 h-full w-80 bg-white/95 backdrop-blur-xl shadow-2xl transition-transform duration-500 ease-in-out z-50 transform ${isStatsOpen ? 'translate-x-0' : 'translate-x-full'} border-l border-white/20 text-slate-800 flex flex-col`}>
+        <div className="p-6 border-b border-slate-100 flex items-center justify-between">
+          <div className="flex items-center space-x-2">
+            <CircleDot className="text-indigo-500" size={20} />
+            <h2 className="text-lg font-bold tracking-tight">Estadísticas</h2>
+          </div>
+          <button 
+            onClick={() => setIsStatsOpen(false)}
+            className="p-2 rounded-full hover:bg-slate-100 transition-colors text-slate-400"
+          >
+            <X size={20} />
+          </button>
+        </div>
+        
+        <div className="flex-grow overflow-y-auto p-6 space-y-8 custom-scrollbar">
+          <section>
+            <h3 className="text-xs font-bold text-slate-400 uppercase tracking-widest mb-4">Resumen General</h3>
+            <div className="grid grid-cols-2 gap-4">
+              <div className="bg-slate-50 p-4 rounded-2xl border border-slate-100">
+                <p className="text-[10px] font-bold text-slate-400 uppercase">Total Tareas</p>
+                <p className="text-2xl font-black text-slate-700">{Object.keys(data.tasks).length}</p>
+              </div>
+              <div className="bg-emerald-50 p-4 rounded-2xl border border-emerald-100">
+                <p className="text-[10px] font-bold text-emerald-600 uppercase">Completadas</p>
+                <p className="text-2xl font-black text-emerald-700">
+                  {Object.values(data.tasks).filter(t => t.id && data.columns['column-3']?.taskIds.includes(t.id)).length}
+                </p>
+              </div>
+            </div>
+          </section>
+
+          <section>
+            <h3 className="text-xs font-bold text-slate-400 uppercase tracking-widest mb-4">Por Prioridad</h3>
+            <div className="space-y-3">
+              {['high', 'medium', 'low'].map(priority => {
+                const count = Object.values(data.tasks).filter(t => t.priority === priority).length;
+                const total = Object.keys(data.tasks).length || 1;
+                const percentage = Math.round((count / total) * 100);
+                
+                return (
+                  <div key={priority} className="space-y-1">
+                    <div className="flex items-center justify-between text-[11px] font-bold">
+                      <span className="capitalize text-slate-600">{priority}</span>
+                      <span className="text-slate-400">{count} ({percentage}%)</span>
+                    </div>
+                    <div className="h-2 w-full bg-slate-100 rounded-full overflow-hidden">
+                      <div 
+                        className={`h-full transition-all duration-1000 ${
+                          priority === 'high' ? 'bg-red-500' : priority === 'medium' ? 'bg-orange-500' : 'bg-indigo-500'
+                        }`}
+                        style={{ width: `${percentage}%` }}
+                      ></div>
+                    </div>
+                  </div>
+                );
+              })}
+            </div>
+          </section>
+
+          <section>
+            <h3 className="text-xs font-bold text-slate-400 uppercase tracking-widest mb-4">Tiempo Invertido</h3>
+            <div className="bg-indigo-50 p-6 rounded-2xl border border-indigo-100 flex flex-col items-center justify-center text-center">
+              <Clock size={32} className="text-indigo-500 mb-2" />
+              <p className="text-[10px] font-bold text-indigo-400 uppercase mb-1">Tiempo Total Registrado</p>
+              <p className="text-3xl font-black text-indigo-700 font-mono">
+                {formatTime(Object.values(data.tasks).reduce((acc, t) => acc + (t.totalTime || 0), 0))}
+              </p>
+            </div>
+          </section>
         </div>
       </div>
     </div>
