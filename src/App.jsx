@@ -1,6 +1,7 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import { DragDropContext, Droppable, Draggable } from '@hello-pangea/dnd';
-import { MoreHorizontal, Plus, Trash2, Calendar, Filter, Palette, CheckCircle2, Clock, AlertTriangle, Tag, CheckSquare, Square, X, Pencil, Check, ArrowRight, ArrowLeft, ArrowDown, ArrowUp, GripVertical, ListTodo, CircleDot, Circle, History } from 'lucide-react';
+import confetti from 'canvas-confetti';
+import { MoreHorizontal, Plus, Trash2, Calendar, Filter, Palette, CheckCircle2, Clock, AlertTriangle, Tag, CheckSquare, Square, X, Pencil, Check, ArrowRight, ArrowLeft, ArrowDown, ArrowUp, GripVertical, ListTodo, CircleDot, Circle, History, MessageSquare, UserPlus, UserMinus, UserCog } from 'lucide-react';
 
 const themes = {
   indigo: 'linear-gradient(135deg, #667eea 0%, #764ba2 100%)',
@@ -38,6 +39,9 @@ const initialData = {
       subtasks: [
         { id: 'sub-1', content: 'Create color palette', completed: true },
         { id: 'sub-2', content: 'Design task cards', completed: false }
+      ],
+      comments: [
+        { id: 'com-1', memberId: 'm1', text: 'Initial design looks promising!', timestamp: new Date().toISOString() }
       ]
     },
     'task-2': { 
@@ -107,6 +111,9 @@ function App() {
   const [isHistoryOpen, setIsHistoryOpen] = useState(false);
   const [showArchived, setShowArchived] = useState(false);
   const [isStatsOpen, setIsStatsOpen] = useState(false);
+  const [isMembersModalOpen, setIsMembersModalOpen] = useState(false);
+  const [newMemberName, setNewMemberName] = useState('');
+  const [newCommentText, setNewCommentText] = useState('');
 
   useEffect(() => {
     localStorage.setItem('kanban-data', JSON.stringify(data));
@@ -289,6 +296,17 @@ function App() {
         draggableId,
         `Tarea movida de "${start.title}" a "${finish.title}"`
       );
+      
+      // Trigger confetti if moved to the last column
+      const lastColumnId = data.columnOrder[data.columnOrder.length - 1];
+      if (destination.droppableId === lastColumnId) {
+        confetti({
+          particleCount: 150,
+          spread: 70,
+          origin: { y: 0.6 },
+          colors: ['#667eea', '#764ba2', '#f6d365', '#fda085', '#11998e', '#38ef7d']
+        });
+      }
     }
   };
 
@@ -456,6 +474,69 @@ function App() {
       },
     });
     addHistoryLog('tag_change', taskId, `${isAdding ? 'Etiqueta añadida' : 'Etiqueta eliminada'}: "${tag}"`);
+  };
+ 
+  const handleAddComment = (taskId) => {
+    if (!newCommentText.trim()) return;
+    const newComment = {
+      id: `com-${Date.now()}`,
+      memberId: 'm1', // Defaulting to first member for now
+      text: newCommentText,
+      timestamp: new Date().toISOString()
+    };
+ 
+    setData({
+      ...data,
+      tasks: {
+        ...data.tasks,
+        [taskId]: {
+          ...data.tasks[taskId],
+          comments: [...(data.tasks[taskId].comments || []), newComment]
+        }
+      }
+    });
+    setNewCommentText('');
+    addHistoryLog('comment_add', taskId, 'Nuevo comentario añadido');
+  };
+ 
+  const handleAddMember = () => {
+    if (!newMemberName.trim()) return;
+    const colors = ['bg-indigo-500', 'bg-emerald-500', 'bg-amber-500', 'bg-rose-500', 'bg-fuchsia-500', 'bg-sky-500'];
+    const newMember = {
+      id: `m-${Date.now()}`,
+      name: newMemberName,
+      avatar: newMemberName.substring(0, 2).toUpperCase(),
+      color: colors[Math.floor(Math.random() * colors.length)]
+    };
+ 
+    setData({
+      ...data,
+      members: [...(data.members || defaultMembers), newMember]
+    });
+    setNewMemberName('');
+    addHistoryLog('member_add', null, `Miembro añadido: ${newMemberName}`);
+  };
+ 
+  const handleDeleteMember = (memberId) => {
+    // Prevent deleting the last member or self if applicable
+    if ((data.members || defaultMembers).length <= 1) return;
+    
+    const newMembers = (data.members || defaultMembers).filter(m => m.id !== memberId);
+    
+    // Clear assignments for this member
+    const newTasks = { ...data.tasks };
+    Object.keys(newTasks).forEach(taskId => {
+      if (newTasks[taskId].assignedTo === memberId) {
+        newTasks[taskId].assignedTo = null;
+      }
+    });
+ 
+    setData({
+      ...data,
+      members: newMembers,
+      tasks: newTasks
+    });
+    addHistoryLog('member_delete', null, `Miembro eliminado`);
   };
 
   const handleAddColumn = () => {
@@ -628,7 +709,7 @@ function App() {
             <CircleDot size={18} />
           </button>
           
-          <div className="h-8 w-8 rounded-full bg-gradient-to-tr from-pink-400 to-yellow-300 ring-2 ring-white/20 ml-4"></div>
+          <div className="h-8 w-8 rounded-full bg-gradient-to-tr from-pink-400 to-yellow-300 ring-2 ring-white/20 ml-4 cursor-pointer hover:scale-110 transition-all shadow-lg" onClick={() => setIsMembersModalOpen(true)} title="Gestionar Equipo"></div>
         </div>
       </header>
 
@@ -912,6 +993,53 @@ function App() {
                                           <Clock size={14} />
                                           <span className="text-xs font-bold font-mono">{formatTime(task.totalTime || 0)}</span>
                                         </div>
+                                        
+                                        {/* Comments Section */}
+                                        <div className="w-full space-y-3 mt-4 pt-4 border-t border-slate-100">
+                                          <div className="flex items-center space-x-2 text-slate-400">
+                                            <MessageSquare size={14} />
+                                            <span className="text-[10px] font-bold uppercase">Comentarios</span>
+                                          </div>
+                                          <div className="space-y-3 max-h-40 overflow-y-auto pr-2 custom-scrollbar">
+                                            {(task.comments || []).map(comment => {
+                                              const member = (data.members || defaultMembers).find(m => m.id === comment.memberId);
+                                              return (
+                                                <div key={comment.id} className="flex space-x-2">
+                                                  <div className={`w-6 h-6 rounded-full flex-shrink-0 flex items-center justify-center text-[8px] font-bold text-white ${member?.color || 'bg-slate-400'}`}>
+                                                    {member?.avatar || '??'}
+                                                  </div>
+                                                  <div className="bg-white border border-slate-100 rounded-lg p-2 flex-grow shadow-sm">
+                                                    <div className="flex items-center justify-between mb-1">
+                                                      <span className="text-[9px] font-bold text-slate-600">{member?.name || 'Unknown'}</span>
+                                                      <span className="text-[8px] text-slate-400">{new Date(comment.timestamp).toLocaleDateString()}</span>
+                                                    </div>
+                                                    <p className="text-[11px] text-slate-500 leading-relaxed">{comment.text}</p>
+                                                  </div>
+                                                </div>
+                                              );
+                                            })}
+                                            {(!task.comments || task.comments.length === 0) && (
+                                              <p className="text-[10px] text-slate-400 italic text-center py-2">No hay comentarios aún.</p>
+                                            )}
+                                          </div>
+                                          <div className="relative mt-2">
+                                            <input 
+                                              type="text"
+                                              placeholder="Escribe un comentario..."
+                                              className="text-[11px] bg-slate-50 border border-slate-200 rounded-lg px-3 py-2 w-full focus:ring-2 focus:ring-indigo-400 focus:outline-none pr-10"
+                                              value={newCommentText}
+                                              onChange={(e) => setNewCommentText(e.target.value)}
+                                              onKeyDown={(e) => e.key === 'Enter' && handleAddComment(task.id)}
+                                            />
+                                            <button 
+                                              onClick={() => handleAddComment(task.id)}
+                                              className="absolute right-2 top-1/2 -translate-y-1/2 text-indigo-500 hover:text-indigo-700"
+                                            >
+                                              <ArrowRight size={14} />
+                                            </button>
+                                          </div>
+                                        </div>
+ 
                                         <button 
                                           onClick={() => handleUpdateTask(task.id, editingTaskContent, editingTaskDate, editingTaskDescription)}
                                           className="text-xs font-bold bg-indigo-500 text-white px-4 py-2 rounded-lg hover:bg-indigo-600 shadow-sm active:scale-95 transition-all"
@@ -1278,8 +1406,99 @@ function App() {
           </section>
         </div>
       </div>
+ 
+      {/* Members Management Modal */}
+      {isMembersModalOpen && (
+        <div className="fixed inset-0 z-[100] flex items-center justify-center p-4">
+          <div 
+            className="absolute inset-0 bg-slate-900/60 backdrop-blur-sm transition-opacity" 
+            onClick={() => setIsMembersModalOpen(false)}
+          ></div>
+          <div className="relative w-full max-w-md bg-white rounded-3xl shadow-2xl overflow-hidden animate-modal-in">
+            <div className="p-6 border-b border-slate-100 flex items-center justify-between bg-indigo-50/50">
+              <div className="flex items-center space-x-3">
+                <div className="p-2 bg-indigo-500 rounded-xl text-white">
+                  <UserCog size={20} />
+                </div>
+                <div>
+                  <h2 className="text-lg font-bold text-slate-800">Gestionar Equipo</h2>
+                  <p className="text-[10px] text-indigo-500 font-bold uppercase tracking-wider">Configuración de Miembros</p>
+                </div>
+              </div>
+              <button 
+                onClick={() => setIsMembersModalOpen(false)}
+                className="p-2 rounded-full hover:bg-white transition-colors text-slate-400"
+              >
+                <X size={20} />
+              </button>
+            </div>
+            
+            <div className="p-6 space-y-6">
+              <div className="space-y-4">
+                <label className="text-xs font-bold text-slate-400 uppercase tracking-widest pl-1">Agregar Miembro</label>
+                <div className="flex space-x-2">
+                  <div className="relative flex-grow">
+                    <input 
+                      type="text"
+                      placeholder="Nombre del nuevo miembro..."
+                      className="w-full bg-slate-50 border border-slate-200 rounded-xl px-4 py-3 text-sm text-slate-700 focus:ring-2 focus:ring-indigo-400 focus:outline-none pr-10"
+                      value={newMemberName}
+                      onChange={(e) => setNewMemberName(e.target.value)}
+                      onKeyDown={(e) => e.key === 'Enter' && handleAddMember()}
+                    />
+                    <div className="absolute right-3 top-1/2 -translate-y-1/2 text-slate-300">
+                      <UserPlus size={18} />
+                    </div>
+                  </div>
+                  <button 
+                    onClick={handleAddMember}
+                    className="bg-indigo-500 text-white px-5 rounded-xl font-bold text-sm hover:bg-indigo-600 transition-all shadow-lg active:scale-95"
+                  >
+                    Añadir
+                  </button>
+                </div>
+              </div>
+ 
+              <div className="space-y-4">
+                <label className="text-xs font-bold text-slate-400 uppercase tracking-widest pl-1">Miembros Actuales</label>
+                <div className="space-y-2 max-h-60 overflow-y-auto pr-2 custom-scrollbar">
+                  {(data.members || defaultMembers).map(member => (
+                    <div key={member.id} className="flex items-center justify-between p-3 bg-slate-50 rounded-2xl border border-slate-100 group hover:border-indigo-200 hover:bg-white transition-all">
+                      <div className="flex items-center space-x-3">
+                        <div className={`w-10 h-10 rounded-full flex items-center justify-center text-xs font-bold text-white shadow-sm ${member.color}`}>
+                          {member.avatar}
+                        </div>
+                        <div>
+                          <p className="text-sm font-bold text-slate-700">{member.name}</p>
+                          <p className="text-[10px] text-slate-400">ID: {member.id}</p>
+                        </div>
+                      </div>
+                      <button 
+                        onClick={() => handleDeleteMember(member.id)}
+                        className="p-2 rounded-lg text-slate-300 hover:text-rose-500 hover:bg-rose-50 transition-all opacity-0 group-hover:opacity-100"
+                        title="Eliminar Miembro"
+                      >
+                        <UserMinus size={18} />
+                      </button>
+                    </div>
+                  ))}
+                </div>
+              </div>
+            </div>
+            
+            <div className="p-6 bg-slate-50 border-t border-slate-100 flex justify-end">
+              <button 
+                onClick={() => setIsMembersModalOpen(false)}
+                className="text-sm font-bold text-slate-500 hover:text-slate-800 transition-colors"
+              >
+                Cerrar Panel
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 }
-
+ 
 export default App;
